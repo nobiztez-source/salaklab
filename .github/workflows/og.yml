@@ -1,0 +1,45 @@
+name: อัปเดตรูปแชร์ผลหวยล่าสุด
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['index.html', 'data.json', 'og-*.png']
+  workflow_dispatch:
+  schedule:
+    # เวลาเป็น UTC: วันออกรางวัลและวันถัดไป ทุก 30 นาที ช่วง 15:00–20:30 น. เวลาไทย
+    - cron: '*/30 8-13 1,2,3,16,17,30,31 * *'
+    # สำรอง: เช็กทุกวัน 09:00 น. เวลาไทย (เผื่องวดเลื่อน)
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: og
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: โหลดฟอนต์ Kanit / Anuphan
+        run: |
+          mkdir -p fonts
+          base=https://github.com/google/fonts/raw/main/ofl
+          [ -f fonts/Kanit-ExtraBold.ttf ] || curl -fsSL -o fonts/Kanit-ExtraBold.ttf "$base/kanit/Kanit-ExtraBold.ttf"
+          [ -f fonts/Kanit-SemiBold.ttf ]  || curl -fsSL -o fonts/Kanit-SemiBold.ttf  "$base/kanit/Kanit-SemiBold.ttf"
+          [ -f fonts/Anuphan.ttf ]         || curl -fsSL -o fonts/Anuphan.ttf         "$base/anuphan/Anuphan%5Bwght%5D.ttf"
+
+      - name: สร้างหน้าแชร์
+        run: python3 build.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+
+      - name: บันทึกเมื่อมีงวดใหม่
+        run: |
+          git config user.name  "salaklab-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A .
+          if git diff --cached --quiet; then echo "ไม่มีอะไรเปลี่ยน"; exit 0; fi
+          git commit -m "อัปเดตรูปแชร์ผลหวยล่าสุด"
+          git push
