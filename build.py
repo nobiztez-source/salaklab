@@ -97,7 +97,7 @@ img{{max-width:100%;border-radius:14px}}a{{display:inline-block;margin-top:18px;
 </head><body><div><img src="{n}" alt="ผลสลากล่าสุด" width="600" height="315"><br>
 <a id="go" href="{a}">เข้าสลากแล็บ ตรวจหวยฟรี</a><p style="opacity:.7">กำลังพาไปหน้าตรวจหวย…</p></div>
 <script>location.replace({aj});</script>
-</body></html>'''.format(t=e(title), d=e(desc), u=e(url), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
+</body></html>'''.format(t=e(title), d=e(desc), u=e(url + '?d=' + d['date'].replace('-', '')), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
                          n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL))
 
 
