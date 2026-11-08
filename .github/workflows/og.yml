@@ -24,6 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: ทดสอบตัวสร้างหน้าแชร์
+        run: python3 -m unittest discover -s tests -v
+
       - name: โหลดฟอนต์ Kanit / Anuphan
         run: |
           mkdir -p fonts
@@ -33,7 +36,7 @@ jobs:
           [ -f fonts/Anuphan.ttf ]         || curl -fsSL -o fonts/Anuphan.ttf         "$base/anuphan/Anuphan%5Bwght%5D.ttf"
 
       - name: สร้างหน้าแชร์
-        run: python3 build.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+        run: python3 build.py ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && '--force' || '' }}
 
       - name: บันทึกเมื่อมีงวดใหม่
         run: |
