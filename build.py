@@ -4,7 +4,7 @@
   python3 build.py            # สร้างเมื่อมีงวดใหม่
   python3 build.py --force    # สร้างใหม่ทุกครั้ง
 """
-import html, json, os, pathlib, subprocess, sys, tempfile, urllib.request
+import html, json, os, pathlib, subprocess, sys, urllib.request
 
 APP_URL = 'https://script.google.com/macros/s/AKfycbxhIOh8KTaJEmsvedhI3ISnYBu2-YHDENgIs1xWBuEovL18AyrmJyP5eKSXrr25XMAyQw/exec'
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -92,11 +92,20 @@ def index_html(d, img_name):
 <meta name="twitter:description" content="{d}">
 <meta name="twitter:image" content="{i}">
 <link rel="icon" href="data:,">
-<style>body{{margin:0;background:#0B3B33;color:#fff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center;padding:16px;box-sizing:border-box}}
-img{{max-width:100%;border-radius:14px}}a{{display:inline-block;margin-top:18px;background:#FFC233;color:#1f1600;font-weight:800;font-size:20px;padding:14px 28px;border-radius:40px;text-decoration:none}}</style>
-</head><body><div><img src="{n}" alt="ผลสลากล่าสุด" width="600" height="315"><br>
-<a id="go" href="{a}">เข้าสลากแล็บ ตรวจหวยฟรี</a><p style="opacity:.7">กำลังพาไปหน้าตรวจหวย…</p></div>
-<script>location.replace({aj});</script>
+<meta name="theme-color" content="#0B3B33">
+<style>html,body{{margin:0;height:100%;background:#0B3B33}}
+#app{{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0B3B33}}
+#fb{{position:fixed;inset:0;display:grid;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}}
+#fb a{{display:inline-block;margin-top:14px;background:#FFC233;color:#1f1600;font-weight:800;padding:12px 24px;border-radius:40px;text-decoration:none}}</style>
+</head><body>
+<div id="fb"><div>กำลังเปิดสลากแล็บ…<br><a href="{a}">ถ้าไม่ขึ้น กดที่นี่</a></div></div>
+<iframe id="app" title="สลากแล็บ" allow="clipboard-write; web-share; camera" referrerpolicy="no-referrer-when-downgrade"></iframe>
+<script>
+(function(){{
+  var app={aj}, q=location.search.replace(/^\\?/,'').split('&').filter(function(p){{return p&&p.indexOf('d=')!==0;}}).join('&');
+  document.getElementById('app').src=app+(q?'?'+q:'')+location.hash;
+}})();
+</script>
 </body></html>'''.format(t=e(title), d=e(desc), u=e(url + '?d=' + d['date'].replace('-', '')), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
                          n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL))
 
@@ -115,41 +124,20 @@ def main():
         raise SystemExit('ยังไม่มีผลล่าสุดจากระบบ: %r' % d)
     data_file = ROOT / 'data.json'
     old = json.loads(data_file.read_text('utf-8')) if data_file.exists() else {}
-    img_name = 'og-%s.png' % d['date'].replace('-', '')
-    image_file = ROOT / img_name
-    result_keys = ('date', 'first', 'last2', 'front3', 'last3')
-    unchanged = all(old.get(key) == d.get(key) for key in result_keys)
-    if not force and unchanged and (ROOT / 'index.html').is_file() and image_file.is_file() and image_file.stat().st_size > 0:
+    if not force and old.get('date') == d['date'] and old.get('first') == d['first'] and (ROOT / 'index.html').exists():
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
         return
-
-    # Render and stage every output before replacing the last working page.
-    # The card stays beside fonts/ so its relative font URLs remain valid.
-    with tempfile.TemporaryDirectory(prefix='_build-', dir=ROOT) as temporary:
-        stage = pathlib.Path(temporary)
-        staged_image = stage / img_name
-        (stage / 'index.html').write_text(index_html(d, img_name), 'utf-8')
-        (stage / 'data.json').write_text(json.dumps(d, ensure_ascii=False, indent=1), 'utf-8')
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', prefix='_card-', suffix='.html', dir=ROOT, delete=False) as f:
-            card = pathlib.Path(f.name)
-        try:
-            card.write_text(card_html(d), 'utf-8')
-            subprocess.run([find_chrome(), '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
-                            '--force-device-scale-factor=1', '--window-size=1200,630', '--virtual-time-budget=8000',
-                            '--user-data-dir=' + str(stage / 'chrome-profile'),
-                            '--screenshot=' + str(staged_image), card.as_uri()], check=True)
-            if not staged_image.is_file() or staged_image.stat().st_size == 0:
-                raise RuntimeError('Chrome did not create a nonempty screenshot')
-        finally:
-            card.unlink(missing_ok=True)
-        staged_image.replace(image_file)
-        (stage / 'index.html').replace(ROOT / 'index.html')
-        (stage / 'data.json').replace(data_file)
-
-    # Keep old images until the replacement page and image are safely in place.
+    img_name = 'og-%s.png' % d['date'].replace('-', '')
+    card = ROOT / '_card.html'
+    card.write_text(card_html(d), 'utf-8')
     for p in ROOT.glob('og-*.png'):
-        if p != image_file:
-            p.unlink()
+        p.unlink()
+    subprocess.run([find_chrome(), '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+                    '--force-device-scale-factor=1', '--window-size=1200,630', '--virtual-time-budget=8000',
+                    '--screenshot=' + str(ROOT / img_name), card.as_uri()], check=True)
+    card.unlink()
+    (ROOT / 'index.html').write_text(index_html(d, img_name), 'utf-8')
+    data_file.write_text(json.dumps(d, ensure_ascii=False, indent=1), 'utf-8')
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
 
 
