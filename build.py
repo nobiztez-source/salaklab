@@ -91,19 +91,42 @@ def index_html(d, img_name):
 <meta name="twitter:title" content="{t}">
 <meta name="twitter:description" content="{d}">
 <meta name="twitter:image" content="{i}">
-<link rel="icon" href="data:,">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="สลากแล็บ">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0B3B33">
 <style>html,body{{margin:0;height:100%;background:#0B3B33}}
+#inst{{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:9;display:none;align-items:center;gap:8px;width:max-content;max-width:min(440px,calc(100% - 32px));box-sizing:border-box;background:#FFC233;color:#1f1600;font:700 14px/1.35 system-ui,sans-serif;padding:8px 8px 8px 14px;border-radius:24px;box-shadow:0 6px 20px rgba(0,0,0,.3)}}
+#inst button{{font:inherit;border:0;border-radius:18px;cursor:pointer;white-space:nowrap;flex:none}}#inst .go{{background:#0B3B33;color:#fff;padding:7px 14px}}#inst .x{{background:transparent;color:#1f1600;padding:4px 8px;font-size:18px;line-height:1}}
 #app{{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0B3B33}}
 #fb{{position:fixed;inset:0;display:grid;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}}
 #fb a{{display:inline-block;margin-top:14px;background:#FFC233;color:#1f1600;font-weight:800;padding:12px 24px;border-radius:40px;text-decoration:none}}</style>
 </head><body>
 <div id="fb"><div>กำลังเปิดสลากแล็บ…<br><a href="{a}">ถ้าไม่ขึ้น กดที่นี่</a></div></div>
 <iframe id="app" title="สลากแล็บ" allow="clipboard-write; web-share; camera" referrerpolicy="no-referrer-when-downgrade"></iframe>
+<div id="inst" role="dialog" aria-label="ติดตั้งแอป"><span id="instTxt"></span><button class="go" id="instGo" type="button">ติดตั้ง</button><button class="x" id="instX" type="button" aria-label="ปิด">×</button></div>
 <script>
 (function(){{
   var app={aj}, q=location.search.replace(/^\\?/,'').split('&').filter(function(p){{return p&&p.indexOf('d=')!==0;}}).join('&');
   document.getElementById('app').src=app+(q?'?'+q:'')+location.hash;
+}})();
+if('serviceWorker' in navigator){{window.addEventListener('load',function(){{navigator.serviceWorker.register('sw.js').catch(function(){{}});}});}}
+(function(){{
+  var K='slk_inst_hide', box=document.getElementById('inst'), txt=document.getElementById('instTxt'), go=document.getElementById('instGo'), ev=null;
+  function quiet(){{try{{return Date.now()-(+localStorage.getItem(K)||0)<12096e5;}}catch(e){{return false;}}}}
+  function hide(remember){{box.style.display='none';if(remember){{try{{localStorage.setItem(K,String(Date.now()));}}catch(e){{}}}}}}
+  function show(){{if(quiet())return;box.style.display='flex';setTimeout(function(){{hide(false);}},15000);}}
+  var standalone=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone;
+  if(standalone)return;
+  document.getElementById('instX').onclick=function(){{hide(true);}};
+  window.addEventListener('beforeinstallprompt',function(e){{e.preventDefault();ev=e;txt.textContent='ติดตั้งสลากแล็บไว้หน้าจอ ตรวจหวยได้ในแตะเดียว';go.style.display='';show();}});
+  go.onclick=function(){{if(!ev)return;ev.prompt();ev.userChoice.then(function(){{ev=null;hide(true);}});}};
+  var ios=/iphone|ipad|ipod/i.test(navigator.userAgent)&&!/crios|fxios/i.test(navigator.userAgent);
+  if(ios){{txt.textContent='เพิ่มสลากแล็บไว้หน้าจอ: แตะปุ่มแชร์ แล้วเลือก "เพิ่มไปยังหน้าจอโฮม"';go.style.display='none';setTimeout(show,4000);}}
 }})();
 </script>
 </body></html>'''.format(t=e(title), d=e(desc), u=e(url + '?d=' + d['date'].replace('-', '')), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
@@ -129,6 +152,7 @@ def archive_html(d, older):
 <link rel="canonical" href="{u}">
 <meta property="og:type" content="article"><meta property="og:title" content="{t}"><meta property="og:description" content="{ds}"><meta property="og:url" content="{u}">
 <meta name="theme-color" content="#0B3B33">
+<link rel="icon" href="../../icon.svg" type="image/svg+xml"><link rel="manifest" href="../../manifest.webmanifest"><link rel="apple-touch-icon" href="../../apple-touch-icon.png">
 <style>body{{margin:0;background:#eef3ef;color:#0f2a24;font:16px/1.6 system-ui,sans-serif}}main{{max-width:640px;margin:0 auto;padding:20px 16px 40px}}
 h1{{font-size:24px;line-height:1.3;margin:8px 0 16px}}.p1{{font:800 44px/1.1 system-ui,sans-serif;letter-spacing:6px;background:#0B3B33;color:#fff;border-radius:18px;padding:18px;text-align:center}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}}td,th{{padding:12px;border-bottom:1px solid #d6e2db;text-align:left}}td b{{font-size:20px;letter-spacing:1px}}
@@ -246,6 +270,129 @@ def safe_backfill():
         print('เติมผลย้อนหลังไม่สำเร็จรอบนี้: %r' % e)
 
 
+# ---------------- PWA: ติดตั้งเป็นแอปบนมือถือ ----------------
+PWA_VERSION = '1'
+ICON_GLYPH = '''<defs><mask id="n"><rect width="64" height="64" fill="#fff"/><circle cx="3" cy="32" r="6" fill="#000"/><circle cx="61" cy="32" r="6" fill="#000"/></mask></defs>
+<rect x="3" y="12" width="58" height="40" rx="9" fill="#0f5a4f" mask="url(#n)"/>
+<line x1="23.5" y1="17" x2="23.5" y2="47" stroke="#e8eee8" stroke-width="2" stroke-dasharray="3 3" stroke-linecap="round" opacity=".55"/>
+<rect x="10" y="22.5" width="7" height="3" rx="1.5" fill="#e8eee8" opacity=".85"/><rect x="10" y="30.5" width="7" height="3" rx="1.5" fill="#e8eee8" opacity=".85"/><rect x="10" y="38.5" width="7" height="3" rx="1.5" fill="#e8eee8" opacity=".85"/>
+<circle cx="42.5" cy="32" r="12.5" fill="#f0b43a"/>
+<path d="M36.6 32.4l4.2 4.2 7.6-8.6" fill="none" stroke="#0b463d" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'''
+
+
+def icon_svg(mode='any'):
+    # maskable: พื้นเต็มกรอบ + ย่อรูปให้อยู่ในวงปลอดภัย (Android ตัดเป็นวงกลม/สี่เหลี่ยมมนเอง)
+    # apple: พื้นเต็มกรอบ (iOS มนมุมเอง) รูปใหญ่ใกล้เคียงไอคอนปกติ
+    bg = '<rect width="64" height="64" rx="14" fill="#e8eee8"/>' if mode == 'any' else '<rect width="64" height="64" fill="#e8eee8"/>'
+    tf = {'any': 'translate(4 4) scale(.875)', 'maskable': 'translate(11.2 11.2) scale(.65)', 'apple': 'translate(5.8 5.8) scale(.82)'}[mode]
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">%s<g transform="%s">%s</g></svg>' % (bg, tf, ICON_GLYPH)
+
+
+def manifest_json():
+    return json.dumps({
+        'name': 'สลากแล็บ — ตรวจหวยฟรี',
+        'short_name': 'สลากแล็บ',
+        'description': 'ตรวจหวยรัฐบาลฟรี สลากของฉันแจ้งผลอัตโนมัติ สถิติเลขสำนัก',
+        'lang': 'th',
+        'id': './',
+        'start_url': './',
+        'scope': './',
+        'display': 'standalone',
+        'background_color': '#0B3B33',
+        'theme_color': '#0B3B33',
+        'icons': [
+            {'src': 'icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+            {'src': 'icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+            {'src': 'icon-maskable-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
+            {'src': 'icon.svg', 'sizes': 'any', 'type': 'image/svg+xml'},
+        ],
+    }, ensure_ascii=False, indent=1)
+
+
+SW_JS = '''// สลากแล็บ service worker — ทำให้ติดตั้งเป็นแอปได้ และเปิดได้ตอนเน็ตหลุด
+const CACHE = 'slk-v%s';
+const SHELL = ['./', 'offline.html', 'manifest.webmanifest', 'icon-192.png', 'icon.svg', 'data.json'];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null)))).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('slk-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return; // ตัวแอป (script.google.com) ให้เบราว์เซอร์จัดการเอง
+  const fresh = fetch(req).then(res => {
+    if (res && res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
+    return res;
+  });
+  if (req.mode === 'navigate' || url.pathname.endsWith('data.json')) {
+    // หน้าเว็บ/ผลล่าสุด: เอาของใหม่ก่อน ถ้าเน็ตหลุดใช้ของที่เก็บไว้
+    e.respondWith(fresh.catch(() => caches.match(req).then(r => r || (req.mode === 'navigate' ? caches.match('offline.html') : Response.error()))));
+  } else {
+    e.respondWith(caches.match(req).then(r => r || fresh));
+  }
+});
+''' % PWA_VERSION
+
+OFFLINE_HTML = '''<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>สลากแล็บ — ออฟไลน์</title>
+<meta name="theme-color" content="#0B3B33">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0B3B33;color:#fff;font:16px/1.6 system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}
+.c{max-width:420px}.p1{font:800 40px/1.1 system-ui,sans-serif;letter-spacing:5px;background:#fff;color:#0B3B33;border-radius:16px;padding:14px;margin:12px 0}
+.m{opacity:.8;font-size:14px}button{margin-top:16px;background:#FFC233;color:#1f1600;font-weight:800;font-size:16px;border:0;padding:12px 24px;border-radius:40px}</style>
+</head><body><div class="c">
+<h1 style="font-size:22px;margin:0 0 6px">ตอนนี้ยังไม่มีอินเทอร์เน็ต</h1>
+<div id="r" class="m">ต่อเน็ตแล้วกดลองใหม่ เพื่อตรวจสลากและดูเลขล่าสุด</div>
+<button onclick="location.reload()">ลองใหม่</button>
+</div>
+<script>
+(navigator.serviceWorker?navigator.serviceWorker.ready.then(function(g){return g.scope;}):Promise.resolve('./')).then(function(base){return fetch(base+'data.json');}).then(r=>r.json()).then(d=>{if(!d||!d.first)return;
+var el=document.getElementById('r');el.innerHTML='';
+var a=document.createElement('div');a.className='m';var M=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'],t=String(d.date).split('-');a.textContent='ผลล่าสุดที่เก็บไว้ งวด '+(+t[2])+' '+M[+t[1]]+' '+(+t[0]+543)+' · รางวัลที่ 1';
+var b=document.createElement('div');b.className='p1';b.textContent=d.first;
+var c=document.createElement('div');c.className='m';c.textContent='เลขท้าย 2 ตัว '+d.last2+' · ตรวจกับใบตรวจของกองสลากอีกครั้ง';
+el.append(a,b,c);}).catch(function(){});
+</script></body></html>
+'''
+
+
+def render_icon(svg, size, out, transparent):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', prefix='_icon-', suffix='.html', dir=ROOT, delete=False) as f:
+        page = pathlib.Path(f.name)
+    try:
+        page.write_text('<!doctype html><html><head><style>html,body{margin:0;background:transparent}svg{display:block;width:%dpx;height:%dpx}</style></head><body>%s</body></html>'
+                        % (size, size, svg), 'utf-8')
+        cmd = [find_chrome(), '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+               '--force-device-scale-factor=1', '--window-size=%d,%d' % (size, size)]
+        if transparent:
+            cmd.append('--default-background-color=00000000')
+        with tempfile.TemporaryDirectory(prefix='_chrome-', dir=ROOT) as prof:
+            subprocess.run(cmd + ['--user-data-dir=' + prof, '--screenshot=' + str(out), page.as_uri()], check=True)
+    finally:
+        page.unlink(missing_ok=True)
+
+
+def write_pwa(render=True):
+    """เขียนไฟล์แอป (manifest, service worker, หน้าออฟไลน์, ไอคอน) — ไอคอน PNG เรนเดอร์ครั้งเดียวด้วย Chrome"""
+    (ROOT / 'manifest.webmanifest').write_text(manifest_json(), 'utf-8')
+    (ROOT / 'sw.js').write_text(SW_JS, 'utf-8')
+    (ROOT / 'offline.html').write_text(OFFLINE_HTML, 'utf-8')
+    (ROOT / 'icon.svg').write_text(icon_svg(), 'utf-8')
+    if not render:
+        return
+    for name, size, mode in (('icon-192.png', 192, 'any'), ('icon-512.png', 512, 'any'),
+                             ('icon-maskable-512.png', 512, 'maskable'), ('apple-touch-icon.png', 180, 'apple')):
+        out = ROOT / name
+        if out.is_file() and out.stat().st_size > 0:
+            continue
+        try:
+            render_icon(icon_svg(mode), size, out, transparent=(mode == 'any'))
+        except Exception as e:  # ไอคอนพลาดต้องไม่ทำให้หน้าผลหวยล่ม
+            print('ทำไอคอน %s ไม่สำเร็จ: %r' % (name, e))
+
+
 def find_chrome():
     for c in ('google-chrome', 'chromium', 'chromium-browser', os.environ.get('CHROME', '')):
         if c and subprocess.run(['which', c], capture_output=True).returncode == 0:
@@ -268,6 +415,7 @@ def main():
         if not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
             write_archive(d)
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
+        write_pwa(render=False)
         safe_backfill()
         return
 
@@ -299,6 +447,7 @@ def main():
         if p != image_file:
             p.unlink()
     write_archive(d)
+    write_pwa(render=True)
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
     safe_backfill()
 
