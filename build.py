@@ -93,19 +93,13 @@ def index_html(d, img_name):
 <meta name="twitter:image" content="{i}">
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0B3B33">
-<style>html,body{{margin:0;height:100%;background:#0B3B33}}
-#app{{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0B3B33}}
+<style>html,body{{margin:0;height:100%;background:#0B3B33}}iframe{{position:fixed;inset:0;width:100%;height:100%;border:0;background:#eef3ef}}
 #fb{{position:fixed;inset:0;display:grid;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}}
 #fb a{{display:inline-block;margin-top:14px;background:#FFC233;color:#1f1600;font-weight:800;padding:12px 24px;border-radius:40px;text-decoration:none}}</style>
-</head><body>
-<div id="fb"><div>กำลังเปิดสลากแล็บ…<br><a href="{a}">ถ้าไม่ขึ้น กดที่นี่</a></div></div>
-<iframe id="app" title="สลากแล็บ" allow="clipboard-write; web-share; camera" referrerpolicy="no-referrer-when-downgrade"></iframe>
-<script>
-(function(){{
-  var app={aj}, q=location.search.replace(/^\\?/,'').split('&').filter(function(p){{return p&&p.indexOf('d=')!==0;}}).join('&');
-  document.getElementById('app').src=app+(q?'?'+q:'')+location.hash;
-}})();
-</script>
+</head><body><div id="fb"><div>กำลังเปิดสลากแล็บ…<br><a id="go" href="{a}">เปิดสลากแล็บ</a></div></div>
+<iframe id="app" title="สลากแล็บ ตรวจหวย" allow="clipboard-write; web-share; camera" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+<script>(function(){{var app={aj},q=new URLSearchParams(location.search);q.delete('d');var s=q.toString(),u=app+(s?'?'+s:'');
+document.getElementById('app').src=u;document.getElementById('go').href=u;}})();</script>
 </body></html>'''.format(t=e(title), d=e(desc), u=e(url + '?d=' + d['date'].replace('-', '')), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
                          n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL))
 
