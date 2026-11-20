@@ -100,7 +100,45 @@ class BuildTests(unittest.TestCase):
         self.assertEqual((self.root / 'og-20261116.png').read_bytes(), b'new image')
         self.assertIn('og-20261116.png', (self.root / 'index.html').read_text())
         self.assertEqual(json.loads((self.root / 'data.json').read_text())['date'], '2026-11-16')
-        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ['data.json', 'index.html', 'og-20261116.png'])
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ['data.json', 'index.html', 'og-20261116.png', 'r', 'robots.txt', 'sitemap.xml'])
+
+    # ===== หน้าผลรายงวดสำหรับ Google (ข้อความจริง ไม่ใช่ iframe) =====
+    def build_new(self, date='2026-11-16'):
+        self.data['date'] = date
+        with patch.object(build.subprocess, 'run', side_effect=self.render):
+            build.main()
+
+    def test_archive_page_has_indexable_results(self):
+        self.build_new()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertIn('<h1>', page)
+        self.assertIn('16 พ.ย. 2569', page)
+        for n in ['423224', '85', '300', '950', '393', '804']:
+            self.assertIn(n, page)
+        self.assertNotIn('<iframe', page)
+        self.assertIn('rel="canonical" href="https://owner.github.io/salaklab/r/20261116/"', page)
+        self.assertIn('href="../../"', page)
+
+    def test_archive_pages_accumulate_and_link(self):
+        self.build_new('2026-11-16')
+        self.build_new('2026-12-01')
+        self.assertTrue((self.root / 'r' / '20261116' / 'index.html').is_file())
+        newest = (self.root / 'r' / '20261201' / 'index.html').read_text()
+        self.assertIn('href="../20261116/"', newest)
+
+    def test_sitemap_and_robots(self):
+        self.build_new()
+        sm = (self.root / 'sitemap.xml').read_text()
+        self.assertIn('<loc>https://owner.github.io/salaklab/</loc>', sm)
+        self.assertIn('<loc>https://owner.github.io/salaklab/r/20261116/</loc>', sm)
+        self.assertIn('Sitemap: https://owner.github.io/salaklab/sitemap.xml', (self.root / 'robots.txt').read_text())
+
+    def test_unchanged_run_backfills_missing_archive(self):
+        with patch.object(build.subprocess, 'run') as render:
+            build.main()
+        render.assert_not_called()
+        self.assertTrue((self.root / 'r' / '20261101' / 'index.html').is_file())
+        self.assertTrue((self.root / 'sitemap.xml').is_file())
 
 
 if __name__ == '__main__':
