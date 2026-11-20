@@ -116,7 +116,7 @@ class BuildTests(unittest.TestCase):
         for n in ['423224', '85', '300', '950', '393', '804']:
             self.assertIn(n, page)
         self.assertNotIn('<iframe', page)
-        self.assertIn('rel="canonical" href="https://owner.github.io/salaklab/r/20261116/"', page)
+        self.assertIn('rel="canonical" href="%sr/20261116/"' % build.site_url(), page)
         self.assertIn('href="../../"', page)
 
     def test_archive_pages_accumulate_and_link(self):
@@ -129,9 +129,10 @@ class BuildTests(unittest.TestCase):
     def test_sitemap_and_robots(self):
         self.build_new()
         sm = (self.root / 'sitemap.xml').read_text()
-        self.assertIn('<loc>https://owner.github.io/salaklab/</loc>', sm)
-        self.assertIn('<loc>https://owner.github.io/salaklab/r/20261116/</loc>', sm)
-        self.assertIn('Sitemap: https://owner.github.io/salaklab/sitemap.xml', (self.root / 'robots.txt').read_text())
+        url = build.site_url()
+        self.assertIn('<loc>%s</loc>' % url, sm)
+        self.assertIn('<loc>%sr/20261116/</loc>' % url, sm)
+        self.assertIn('Sitemap: %ssitemap.xml' % url, (self.root / 'robots.txt').read_text())
 
     def test_unchanged_run_backfills_missing_archive(self):
         with patch.object(build.subprocess, 'run') as render:
