@@ -4,7 +4,7 @@
   python3 build.py            # สร้างเมื่อมีงวดใหม่
   python3 build.py --force    # สร้างใหม่ทุกครั้ง
 """
-import html, json, os, pathlib, subprocess, sys, tempfile, urllib.request
+import datetime, html, json, os, pathlib, subprocess, sys, tempfile, urllib.request
 
 APP_URL = 'https://script.google.com/macros/s/AKfycbxhIOh8KTaJEmsvedhI3ISnYBu2-YHDENgIs1xWBuEovL18AyrmJyP5eKSXrr25XMAyQw/exec'
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -166,6 +166,86 @@ def write_archive(d):
     (ROOT / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % url, 'utf-8')
 
 
+def today():
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))).strftime('%Y-%m-%d')
+
+
+def fetch_result(date):
+    req = urllib.request.Request(APP_URL + '?api=result&date=' + date, headers={'User-Agent': 'salaklab-pages-builder'})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode('utf-8'))
+
+
+def candidate_dates(stop_year=2006):
+    """วันที่อาจเป็นวันออกรางวัล ไล่จากล่าสุดย้อนไป (งวดปกติ 1, 16 และวันเลื่อนที่พบบ่อย 2, 17, 30 ธ.ค.)"""
+    t = today()
+    y, m = int(t[:4]), int(t[5:7])
+    while y >= stop_year:
+        days = [17, 16, 2, 1] + ([30] if m == 12 else [])
+        for dd in sorted(days, reverse=True):
+            d = '%04d-%02d-%02d' % (y, m, dd)
+            if d < t:
+                yield d
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+
+
+def backfill(max_new=24, max_calls=60):
+    """เติมหน้าผลงวดย้อนหลังทีละน้อยทุกรอบ จำวันที่ไม่มีงวดไว้ใน r/tried.json จะได้ไม่ถามซ้ำ"""
+    base = ROOT / 'r'
+    base.mkdir(exist_ok=True)
+    tried_file = base / 'tried.json'
+    try:
+        tried = set(json.loads(tried_file.read_text('utf-8')))
+    except (OSError, ValueError):
+        tried = set()
+    have = {p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()}
+    added = calls = 0
+    for d in candidate_dates():
+        key = d.replace('-', '')
+        if key in have or d in tried:
+            continue
+        # งวดเดียวกันมีได้วันเดียว: ถ้าครึ่งเดือนนี้มีหน้าแล้ว ไม่ต้องถามวันเลื่อน
+        half = [k for k in have if k[:6] == key[:6] and ((int(k[6:]) <= 3) == (int(key[6:]) <= 3))]
+        if half:
+            continue
+        if added >= max_new or calls >= max_calls:
+            break
+        calls += 1
+        r = fetch_result(d)
+        if r.get('first') and len(r['first']) == 6:
+            page = base / key / 'index.html'
+            page.parent.mkdir(parents=True, exist_ok=True)
+            page.write_text(archive_html({'date': d, 'first': r['first'], 'last2': r['last2'], 'front3': r.get('front3') or [], 'last3': r.get('last3') or []},
+                                         sorted(have, reverse=True)), 'utf-8')
+            have.add(key)
+            added += 1
+        elif r.get('none'):
+            tried.add(d)
+    tried_file.write_text(json.dumps(sorted(tried)), 'utf-8')
+    write_sitemap()
+    print('เติมผลย้อนหลัง %d งวด (ถาม %d ครั้ง)' % (added, calls))
+    return added
+
+
+def write_sitemap():
+    base = ROOT / 'r'
+    url = site_url()
+    keys = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()], reverse=True) if base.is_dir() else []
+    locs = [url] + [url + 'r/' + k + '/' for k in keys]
+    (ROOT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+                                      ''.join('<url><loc>%s</loc></url>\n' % html.escape(u) for u in locs) + '</urlset>\n', 'utf-8')
+    (ROOT / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % url, 'utf-8')
+
+
+def safe_backfill():
+    try:
+        backfill(int(os.environ.get('BACKFILL_MAX', '24')))
+    except Exception as e:  # ห้ามทำให้งานหลักล้ม
+        print('เติมผลย้อนหลังไม่สำเร็จรอบนี้: %r' % e)
+
+
 def find_chrome():
     for c in ('google-chrome', 'chromium', 'chromium-browser', os.environ.get('CHROME', '')):
         if c and subprocess.run(['which', c], capture_output=True).returncode == 0:
@@ -188,6 +268,7 @@ def main():
         if not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
             write_archive(d)
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
+        safe_backfill()
         return
 
     # Render and stage every output before replacing the last working page.
@@ -219,6 +300,7 @@ def main():
             p.unlink()
     write_archive(d)
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
+    safe_backfill()
 
 
 if __name__ == '__main__':
