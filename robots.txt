@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://nobiztez-source.github.io/salaklab/sitemap.xml
