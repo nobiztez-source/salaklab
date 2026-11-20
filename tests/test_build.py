@@ -26,7 +26,9 @@ class BuildTests(unittest.TestCase):
         (self.root / 'data.json').write_text(json.dumps(self.data), encoding='utf-8')
         (self.root / 'index.html').write_text('old index', encoding='utf-8')
         (self.root / self.image_name).write_bytes(b'old image')
-        for target, value in [('ROOT', self.root), ('fetch_latest', lambda: self.data), ('find_chrome', lambda: 'chromium')]:
+        self.history = {}
+        for target, value in [('ROOT', self.root), ('fetch_latest', lambda: self.data), ('find_chrome', lambda: 'chromium'),
+                              ('fetch_result', lambda date: self.history.get(date, {'date': date, 'none': True}))]:
             p = patch.object(build, target, value)
             p.start()
             self.addCleanup(p.stop)
@@ -140,6 +142,41 @@ class BuildTests(unittest.TestCase):
         render.assert_not_called()
         self.assertTrue((self.root / 'r' / '20261101' / 'index.html').is_file())
         self.assertTrue((self.root / 'sitemap.xml').is_file())
+
+    # ===== เติมผลย้อนหลังทีละน้อยทุกรอบ =====
+    def test_backfill_adds_past_draws_and_remembers_misses(self):
+        self.history = {
+            '2026-10-16': {'date': '2026-10-16', 'first': '011781', 'last2': '48', 'front3': ['402', '392'], 'last3': ['171', '255']},
+            '2026-10-01': {'date': '2026-10-01', 'first': '402701', 'last2': '70', 'front3': ['791', '912'], 'last3': ['058', '396']},
+        }
+        calls = []
+        orig = build.fetch_result
+        def spy(date):
+            calls.append(date)
+            return orig(date)
+        with patch.object(build, 'fetch_result', spy), patch.object(build, 'today', lambda: '2026-11-03'):
+            added = build.backfill(max_new=2, max_calls=12)
+        self.assertEqual(added, 2)
+        page = (self.root / 'r' / '20261016' / 'index.html').read_text()
+        self.assertIn('011781', page)
+        self.assertTrue((self.root / 'r' / '20261001' / 'index.html').is_file())
+        self.assertIn('r/20261016/', (self.root / 'sitemap.xml').read_text())
+        tried = json.loads((self.root / 'r' / 'tried.json').read_text())
+        self.assertIn('2026-10-02', tried)
+        calls.clear()
+        with patch.object(build, 'fetch_result', spy), patch.object(build, 'today', lambda: '2026-11-03'):
+            build.backfill(max_new=2, max_calls=6)
+        self.assertNotIn('2026-10-02', calls)
+        self.assertNotIn('2026-10-16', calls)
+
+    def test_backfill_never_breaks_main_build(self):
+        def boom(date):
+            raise OSError('network down')
+        with patch.object(build, 'fetch_result', boom):
+            with patch.object(build.subprocess, 'run') as render:
+                build.main()
+        render.assert_not_called()
+        self.assertTrue((self.root / 'r' / '20261101' / 'index.html').is_file())
 
 
 if __name__ == '__main__':
