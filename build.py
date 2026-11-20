@@ -110,6 +110,62 @@ def index_html(d, img_name):
                          n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL))
 
 
+def archive_html(d, older):
+    """หน้าผลรายงวดแบบข้อความล้วน ให้ Google เก็บได้ (หน้าแรกเป็น iframe ซึ่ง Google อ่านเนื้อหาไม่ได้)"""
+    e = html.escape
+    url = site_url()
+    key = d['date'].replace('-', '')
+    dt = th_date(d['date'])
+    f3 = ' '.join(d.get('front3') or []) or '-'
+    l3 = ' '.join(d.get('last3') or []) or '-'
+    title = 'ตรวจหวย %s ผลสลากกินแบ่งรัฐบาล รางวัลที่ 1 %s เลขท้าย 2 ตัว %s | สลากแล็บ' % (dt, d['first'], d['last2'])
+    desc = 'ผลสลากกินแบ่งรัฐบาล งวด %s รางวัลที่ 1 %s เลขหน้า 3 ตัว %s เลขท้าย 3 ตัว %s เลขท้าย 2 ตัว %s ตรวจสลากของคุณฟรีที่สลากแล็บ' % (dt, d['first'], f3, l3, d['last2'])
+    links = ''.join('<li><a href="../%s/">ผลหวย งวด %s</a></li>' % (k, e(th_date('%s-%s-%s' % (k[:4], k[4:6], k[6:])))) for k in older[:24])
+    more = ('<h2 style="font-size:18px">ผลหวยงวดก่อน ๆ</h2><ul>' + links + '</ul>') if links else ''
+    return '''<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{t}</title>
+<meta name="description" content="{ds}">
+<link rel="canonical" href="{u}">
+<meta property="og:type" content="article"><meta property="og:title" content="{t}"><meta property="og:description" content="{ds}"><meta property="og:url" content="{u}">
+<meta name="theme-color" content="#0B3B33">
+<style>body{{margin:0;background:#eef3ef;color:#0f2a24;font:16px/1.6 system-ui,sans-serif}}main{{max-width:640px;margin:0 auto;padding:20px 16px 40px}}
+h1{{font-size:24px;line-height:1.3;margin:8px 0 16px}}.p1{{font:800 44px/1.1 system-ui,sans-serif;letter-spacing:6px;background:#0B3B33;color:#fff;border-radius:18px;padding:18px;text-align:center}}
+table{{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}}td,th{{padding:12px;border-bottom:1px solid #d6e2db;text-align:left}}td b{{font-size:20px;letter-spacing:1px}}
+.cta{{display:block;text-align:center;background:#FFC233;color:#1f1600;font-weight:800;font-size:18px;padding:14px;border-radius:40px;text-decoration:none;margin:20px 0}}
+.muted{{color:#4d6a62;font-size:14px}}a{{color:#0b3b33}}</style>
+</head><body><main>
+<p class="muted"><a href="../../">สลากแล็บ</a> › ผลหวยย้อนหลัง</p>
+<h1>ผลสลากกินแบ่งรัฐบาล งวด {dt}</h1>
+<p class="muted">รางวัลที่ 1</p>
+<div class="p1">{f}</div>
+<table>
+<tr><th>เลขหน้า 3 ตัว</th><td><b>{f3}</b></td></tr>
+<tr><th>เลขท้าย 3 ตัว</th><td><b>{l3}</b></td></tr>
+<tr><th>เลขท้าย 2 ตัว</th><td><b>{l2}</b></td></tr>
+</table>
+<a class="cta" href="../../">ตรวจสลากของคุณ ครบทุกรางวัล ฟรี</a>
+<p class="muted">ตรวจผลจริงกับใบตรวจของสำนักงานสลากกินแบ่งรัฐบาล (glo.or.th) อีกครั้งก่อนขึ้นเงิน ข้อมูลเพื่อความสะดวกเท่านั้น</p>
+{more}
+</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url + 'r/' + key + '/'), dt=e(dt), f=e(d['first']), f3=e(f3), l3=e(l3), l2=e(d['last2']), more=more)
+
+
+def write_archive(d):
+    """เขียนหน้าผลงวดนี้ (เก็บของงวดเก่าไว้) + sitemap.xml + robots.txt"""
+    base = ROOT / 'r'
+    key = d['date'].replace('-', '')
+    older = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit() and p.name != key], reverse=True) if base.is_dir() else []
+    page = base / key / 'index.html'
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(archive_html(d, older), 'utf-8')
+    url = site_url()
+    keys = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()], reverse=True)
+    locs = [url] + [url + 'r/' + k + '/' for k in keys]
+    (ROOT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+                                      ''.join('<url><loc>%s</loc></url>\n' % html.escape(u) for u in locs) + '</urlset>\n', 'utf-8')
+    (ROOT / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % url, 'utf-8')
+
+
 def find_chrome():
     for c in ('google-chrome', 'chromium', 'chromium-browser', os.environ.get('CHROME', '')):
         if c and subprocess.run(['which', c], capture_output=True).returncode == 0:
@@ -129,6 +185,8 @@ def main():
     result_keys = ('date', 'first', 'last2', 'front3', 'last3')
     unchanged = all(old.get(key) == d.get(key) for key in result_keys)
     if not force and unchanged and (ROOT / 'index.html').is_file() and image_file.is_file() and image_file.stat().st_size > 0:
+        if not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
+            write_archive(d)
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
         return
 
@@ -159,6 +217,7 @@ def main():
     for p in ROOT.glob('og-*.png'):
         if p != image_file:
             p.unlink()
+    write_archive(d)
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
 
 
