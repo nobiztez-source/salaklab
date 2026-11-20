@@ -26,6 +26,9 @@ class BuildTests(unittest.TestCase):
         (self.root / 'data.json').write_text(json.dumps(self.data), encoding='utf-8')
         (self.root / 'index.html').write_text('old index', encoding='utf-8')
         (self.root / self.image_name).write_bytes(b'old image')
+        self.icons = ('icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png')
+        for name in self.icons:  # ในเว็บจริงไอคอนถูกสร้างไว้ตั้งแต่รอบแรกแล้ว
+            (self.root / name).write_bytes(b'icon')
         self.history = {}
         for target, value in [('ROOT', self.root), ('fetch_latest', lambda: self.data), ('find_chrome', lambda: 'chromium'),
                               ('fetch_result', lambda date: self.history.get(date, {'date': date, 'none': True}))]:
@@ -102,7 +105,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual((self.root / 'og-20261116.png').read_bytes(), b'new image')
         self.assertIn('og-20261116.png', (self.root / 'index.html').read_text())
         self.assertEqual(json.loads((self.root / 'data.json').read_text())['date'], '2026-11-16')
-        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ['data.json', 'index.html', 'og-20261116.png', 'r', 'robots.txt', 'sitemap.xml'])
+        self.assertEqual(sorted(p.name for p in self.root.iterdir()), sorted(['data.json', 'index.html', 'og-20261116.png', 'r', 'robots.txt', 'sitemap.xml', 'manifest.webmanifest', 'sw.js', 'offline.html', 'icon.svg'] + list(self.icons)))
 
     # ===== หน้าผลรายงวดสำหรับ Google (ข้อความจริง ไม่ใช่ iframe) =====
     def build_new(self, date='2026-11-16'):
@@ -177,6 +180,61 @@ class BuildTests(unittest.TestCase):
                 build.main()
         render.assert_not_called()
         self.assertTrue((self.root / 'r' / '20261101' / 'index.html').is_file())
+
+    # ---------- PWA ----------
+    def test_pwa_files_written_and_icons_rendered(self):
+        for name in self.icons:
+            (self.root / name).unlink()
+        with patch.object(build.subprocess, 'run', side_effect=self.render) as render:
+            build.write_pwa(render=True)
+        m = json.loads((self.root / 'manifest.webmanifest').read_text('utf-8'))
+        self.assertEqual(m['display'], 'standalone')
+        self.assertEqual(m['start_url'], './')
+        self.assertEqual(m['scope'], './')
+        sizes = {(i['sizes'], i.get('purpose', 'any')) for i in m['icons']}
+        self.assertIn(('192x192', 'any'), sizes)
+        self.assertIn(('512x512', 'any'), sizes)
+        self.assertIn(('512x512', 'maskable'), sizes)
+        for name in ('sw.js', 'offline.html', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'):
+            self.assertTrue((self.root / name).is_file(), name)
+        self.assertEqual(render.call_count, 4)
+        sw = (self.root / 'sw.js').read_text('utf-8')
+        self.assertIn("addEventListener('fetch'", sw)
+        self.assertIn('offline.html', sw)
+        self.assertIn('location.origin', sw)  # ไม่ยุ่งกับคำขอข้ามโดเมน (ตัวแอปใน iframe)
+        # รันซ้ำ: มีรูปแล้วไม่ต้องเรนเดอร์ใหม่
+        with patch.object(build.subprocess, 'run') as again:
+            build.write_pwa(render=True)
+        again.assert_not_called()
+
+    def test_pwa_without_render_never_calls_chrome(self):
+        with patch.object(build.subprocess, 'run') as render:
+            build.write_pwa(render=False)
+        render.assert_not_called()
+        self.assertTrue((self.root / 'manifest.webmanifest').is_file())
+
+    def test_index_and_archive_link_manifest(self):
+        page = build.index_html(self.data, self.image_name)
+        self.assertIn('rel="manifest" href="manifest.webmanifest"', page)
+        self.assertIn('apple-touch-icon', page)
+        self.assertIn("serviceWorker.register('sw.js')", page)
+        self.assertIn('beforeinstallprompt', page)
+        arch = build.archive_html(self.data, [])
+        self.assertIn('href="../../manifest.webmanifest"', arch)
+        self.assertIn('../../apple-touch-icon.png', arch)
+
+    def test_main_writes_pwa_on_both_paths(self):
+        with patch.object(build.subprocess, 'run') as render:
+            build.main()  # งวดเดิม
+        render.assert_not_called()
+        self.assertTrue((self.root / 'sw.js').is_file())
+        (self.root / 'sw.js').unlink()
+        (self.root / 'icon-192.png').unlink()
+        self.data = dict(self.data, first='111111')
+        with patch.object(build.subprocess, 'run', side_effect=self.render):
+            build.main()
+        self.assertTrue((self.root / 'sw.js').is_file())
+        self.assertTrue((self.root / 'icon-192.png').is_file())
 
 
 if __name__ == '__main__':
