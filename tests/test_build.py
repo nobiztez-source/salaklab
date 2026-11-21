@@ -30,8 +30,10 @@ class BuildTests(unittest.TestCase):
         for name in self.icons:  # ในเว็บจริงไอคอนถูกสร้างไว้ตั้งแต่รอบแรกแล้ว
             (self.root / name).write_bytes(b'icon')
         self.history = {}
+        self.dreams = []
         for target, value in [('ROOT', self.root), ('fetch_latest', lambda: self.data), ('find_chrome', lambda: 'chromium'),
-                              ('fetch_result', lambda date: self.history.get(date, {'date': date, 'none': True}))]:
+                              ('fetch_result', lambda date: self.history.get(date, {'date': date, 'none': True})),
+                              ('fetch_dreams', lambda: self.dreams)]:
             p = patch.object(build, target, value)
             p.start()
             self.addCleanup(p.stop)
@@ -244,6 +246,28 @@ class BuildTests(unittest.TestCase):
         self.assertIn('300 950', page)
         self.assertIn("f.className='ready'", page)
         self.assertNotIn('เลขเด็ด', page)
+
+    def test_dream_pages_and_sitemap(self):
+        self.dreams = [{'w': 'งู', 'a': 'งูเห่า', 'two': ['56', '66'], 'three': [], 'd': ['5', '6']},
+                       {'w': 'ช้าง', 'a': '', 'two': ['19'], 'three': ['119'], 'd': []}]
+        with patch.object(build.subprocess, 'run'):
+            build.main()
+        page = (self.root / 'dream' / 'งู' / 'index.html').read_text('utf-8')
+        self.assertIn('ฝันเห็นงู ตีเป็นเลขอะไร', page)
+        self.assertIn('<b>56</b>', page)
+        self.assertIn('ความฝันไม่มีผลต่อโอกาสถูกรางวัล', page)
+        self.assertIn('ฝันเห็นช้าง', page)
+        self.assertTrue((self.root / 'dream' / 'index.html').is_file())
+        sm = (self.root / 'sitemap.xml').read_text('utf-8')
+        self.assertIn('dream/%E0%B8%87%E0%B8%B9/', sm)
+        self.assertIn('/r/20261101/', sm)
+
+    def test_dream_failure_never_breaks_build(self):
+        def boom():
+            raise OSError('offline')
+        with patch.object(build, 'fetch_dreams', boom), patch.object(build.subprocess, 'run'):
+            build.main()
+        self.assertFalse((self.root / 'dream').exists())
 
 if __name__ == '__main__':
     unittest.main()
