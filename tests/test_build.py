@@ -247,6 +247,45 @@ class BuildTests(unittest.TestCase):
         self.assertIn("f.className='ready'", page)
         self.assertNotIn('เลขเด็ด', page)
 
+    FULL = {'near1': ['423223', '423225'], 'second': ['111111', '222222'], 'third': ['333333'], 'fourth': ['444444'], 'fifth': ['555555']}
+
+    def test_archive_page_checks_tickets_without_app(self):
+        self.data.update(self.FULL)
+        self.build_new()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertIn('id="q"', page)
+        self.assertIn('"second": ["111111", "222222"]', page)
+        self.assertNotIn('script.google.com/macros', page.split('<script>')[1] if '<script>' in page else '')
+        self.assertNotIn('ยังประกาศไม่ครบ', page.split('<script>')[0])
+
+    def test_archive_checker_warns_when_prizes_incomplete(self):
+        self.build_new()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertIn('id="q"', page)
+        self.assertIn('ยังประกาศไม่ครบ', page)
+
+    def test_full_prizes_arriving_later_update_archive_without_render(self):
+        self.build_new()
+        self.data = dict(self.data, **self.FULL)
+        with patch.object(build, 'fetch_latest', lambda: self.data), patch.object(build.subprocess, 'run', side_effect=AssertionError('no render')):
+            build.main()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertIn('"third": ["333333"]', page)
+        self.assertEqual(json.loads((self.root / 'data.json').read_text())['fifth'], ['555555'])
+
+    def test_checker_logic_in_node(self):
+        import shutil, subprocess as sp
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('no node')
+        d = dict(self.data, date='2026-11-16', **self.FULL)
+        js = build.checker_js(d)
+        code = js + """
+;const t=(n)=>JSON.stringify(slkCheck(n).map(x=>x[0]));
+console.log([t('423224'),t('423225'),t('111111'),t('300999'),t('000393'),t('000085'),t('999999')].join('|'));"""
+        out = sp.run([node, '-e', code], capture_output=True, text=True, check=True).stdout.strip()
+        self.assertEqual(out, '["รางวัลที่ 1"]|["ข้างเคียงรางวัลที่ 1"]|["รางวัลที่ 2"]|["เลขหน้า 3 ตัว"]|["เลขท้าย 3 ตัว"]|["เลขท้าย 2 ตัว"]|[]')
+
     def test_dream_pages_and_sitemap(self):
         self.dreams = [{'w': 'งู', 'a': 'งูเห่า', 'two': ['56', '66'], 'three': [], 'd': ['5', '6']},
                        {'w': 'ช้าง', 'a': '', 'two': ['19'], 'three': ['119'], 'd': []}]
