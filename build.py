@@ -4,7 +4,7 @@
   python3 build.py            # สร้างเมื่อมีงวดใหม่
   python3 build.py --force    # สร้างใหม่ทุกครั้ง
 """
-import datetime, html, json, os, pathlib, subprocess, sys, tempfile, urllib.request
+import datetime, html, json, os, pathlib, subprocess, sys, tempfile, urllib.parse, urllib.request
 
 APP_URL = 'https://script.google.com/macros/s/AKfycbxhIOh8KTaJEmsvedhI3ISnYBu2-YHDENgIs1xWBuEovL18AyrmJyP5eKSXrr25XMAyQw/exec'
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -208,12 +208,7 @@ def write_archive(d):
     page = base / key / 'index.html'
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_text(archive_html(d, older), 'utf-8')
-    url = site_url()
-    keys = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()], reverse=True)
-    locs = [url] + [url + 'r/' + k + '/' for k in keys]
-    (ROOT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-                                      ''.join('<url><loc>%s</loc></url>\n' % html.escape(u) for u in locs) + '</urlset>\n', 'utf-8')
-    (ROOT / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % url, 'utf-8')
+    write_sitemap()
 
 
 def today():
@@ -283,10 +278,119 @@ def write_sitemap():
     base = ROOT / 'r'
     url = site_url()
     keys = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()], reverse=True) if base.is_dir() else []
-    locs = [url] + [url + 'r/' + k + '/' for k in keys]
+    locs = [url] + [url + 'r/' + k + '/' for k in keys] + dream_urls()
     (ROOT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
                                       ''.join('<url><loc>%s</loc></url>\n' % html.escape(u) for u in locs) + '</urlset>\n', 'utf-8')
     (ROOT / 'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: %ssitemap.xml\n' % url, 'utf-8')
+
+
+# ---------------- หน้าทำนายฝันรายคำ (ให้ Google เจอ "ฝันเห็น___ เลขอะไร") ----------------
+DREAM_SOURCES = 'Sanook, ไทยรัฐ, Wongnai, Shopee Blog, อมรินทร์ทีวี'
+
+
+def fetch_dreams():
+    with urllib.request.urlopen(APP_URL + '?api=dreams', timeout=60) as r:
+        data = json.loads(r.read().decode('utf-8'))
+    out = []
+    for x in (data.get('dreams') or [])[:400]:
+        w = str(x.get('w') or '').strip()
+        if not w or '/' in w or w.startswith('.'):
+            continue
+        out.append({'w': w[:40], 'a': str(x.get('a') or '')[:120],
+                    'two': [n for n in x.get('two') or [] if str(n).isdigit() and len(str(n)) == 2][:8],
+                    'three': [n for n in x.get('three') or [] if str(n).isdigit() and len(str(n)) == 3][:8],
+                    'd': [n for n in x.get('d') or [] if str(n).isdigit() and len(str(n)) == 1][:8]})
+    return out
+
+
+def dream_slug(w):
+    return w.replace(' ', '-')
+
+
+def dream_urls():
+    f = ROOT / 'dream' / 'list.json'
+    if not f.is_file():
+        return []
+    url = site_url()
+    return [url + 'dream/'] + [url + 'dream/' + urllib.parse.quote(dream_slug(x['w'])) + '/' for x in json.loads(f.read_text('utf-8'))]
+
+
+DREAM_CSS = '''body{margin:0;background:#eef3ef;color:#0f2a24;font:16px/1.6 system-ui,sans-serif}main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:24px;line-height:1.3;margin:8px 0 12px}h2{font-size:17px;margin:18px 0 6px}.muted{color:#4d6a62;font-size:14px}a{color:#0b3b33}
+.nums{display:flex;flex-wrap:wrap;gap:8px}.nums b{font:800 26px/1 system-ui,sans-serif;letter-spacing:2px;background:#fff6db;border:1px solid #ffc233;border-radius:14px;padding:10px 16px}
+.cta{display:block;text-align:center;background:#FFC233;color:#1f1600;font-weight:800;font-size:18px;padding:14px;border-radius:40px;text-decoration:none;margin:22px 0}
+.note{background:#fff;border-radius:14px;padding:12px 14px;font-size:14px;color:#4d6a62}ul.all{columns:2;padding-left:18px}'''
+
+
+def dream_page_html(x, all_items):
+    e = html.escape
+    url = site_url() + 'dream/' + urllib.parse.quote(dream_slug(x['w'])) + '/'
+    nums = ' '.join(x['two'] + x['three'])
+    title = 'ฝันเห็น%s ตีเป็นเลขอะไร%s | สลากแล็บ' % (x['w'], (' เลข ' + nums) if nums else '')
+    desc = 'ทำนายฝันเห็น%s ตามตำราที่เล่าต่อกันมา%s เลือกเฉพาะเลขที่ตำราอย่างน้อย 2 แหล่งตรงกัน พร้อมตรวจสลากฟรีที่สลากแล็บ' % (
+        x['w'], (' เลขสองตัว ' + ' '.join(x['two'])) if x['two'] else '')
+    block = ''
+    if x['two']:
+        block += '<h2>เลขสองตัว</h2><div class="nums">%s</div>' % ''.join('<b>%s</b>' % e(n) for n in x['two'])
+    if x['three']:
+        block += '<h2>เลขสามตัว</h2><div class="nums">%s</div>' % ''.join('<b>%s</b>' % e(n) for n in x['three'])
+    if x['d']:
+        block += '<h2>เลขเด่นตามตำรา</h2><div class="nums">%s</div>' % ''.join('<b>%s</b>' % e(n) for n in x['d'])
+    alias = ('<p class="muted">ใช้กับ: %s</p>' % e(x['a'])) if x['a'] else ''
+    others = ''.join('<li><a href="../%s/">ฝันเห็น%s</a></li>' % (e(urllib.parse.quote(dream_slug(o['w']))), e(o['w'])) for o in all_items if o['w'] != x['w'])
+    return '''<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{t}</title><meta name="description" content="{ds}"><link rel="canonical" href="{u}">
+<meta property="og:type" content="article"><meta property="og:title" content="{t}"><meta property="og:description" content="{ds}"><meta property="og:url" content="{u}">
+<meta name="theme-color" content="#0B3B33"><link rel="icon" href="../../icon.svg" type="image/svg+xml"><link rel="manifest" href="../../manifest.webmanifest">
+<style>{css}</style></head><body><main>
+<p class="muted"><a href="../../">สลากแล็บ</a> › <a href="../">ทำนายฝัน</a></p>
+<h1>ฝันเห็น{w} ตีเป็นเลขอะไร</h1>{alias}
+{block}
+<a class="cta" href="../../#dream">ค้นความฝันอื่น และตรวจสลากฟรี</a>
+<p class="note">เลขตามความเชื่อที่เล่าต่อกันมา แต่ละตำราให้เลขไม่ตรงกัน เราเลือกเฉพาะที่ตรงกันอย่างน้อย 2 แหล่ง ({src}) ความฝันไม่มีผลต่อโอกาสถูกรางวัล ทุกเลขมีโอกาสเท่ากัน ซื้อสลากอย่างพอประมาณ</p>
+<h2>ความฝันอื่น ๆ</h2><ul class="all">{others}</ul>
+</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url), css=DREAM_CSS, w=e(x['w']), alias=alias, block=block, src=e(DREAM_SOURCES), others=others)
+
+
+def dream_index_html(all_items):
+    e = html.escape
+    url = site_url() + 'dream/'
+    lis = ''.join('<li><a href="%s/">ฝันเห็น%s</a></li>' % (e(urllib.parse.quote(dream_slug(o['w']))), e(o['w'])) for o in all_items)
+    return '''<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ทำนายฝัน ตีเป็นเลข {n} เรื่อง (ตำราตรงกันหลายแหล่ง) | สลากแล็บ</title>
+<meta name="description" content="ทำนายฝันเป็นเลข {n} เรื่องยอดนิยม เช่น ฝันเห็นงู ช้าง แหวน คนตาย เลือกเฉพาะเลขที่ตำราอย่างน้อย 2 แหล่งตรงกัน">
+<link rel="canonical" href="{u}"><meta name="theme-color" content="#0B3B33"><link rel="icon" href="../icon.svg" type="image/svg+xml"><link rel="manifest" href="../manifest.webmanifest">
+<style>{css}</style></head><body><main>
+<p class="muted"><a href="../">สลากแล็บ</a> › ทำนายฝัน</p>
+<h1>ทำนายฝันเป็นเลข {n} เรื่อง</h1>
+<p class="muted">เลือกเฉพาะเลขที่ตำราอย่างน้อย 2 แหล่งตรงกัน ({src})</p>
+<ul class="all">{lis}</ul>
+<a class="cta" href="../#dream">ค้นความฝันในแอป และตรวจสลากฟรี</a>
+<p class="note">ความฝันไม่มีผลต่อโอกาสถูกรางวัล ทุกเลขมีโอกาสเท่ากัน ซื้อสลากอย่างพอประมาณ</p>
+</main></body></html>'''.format(n=len(all_items), u=e(url), css=DREAM_CSS, src=e(DREAM_SOURCES), lis=lis)
+
+
+def write_dreams(items):
+    base = ROOT / 'dream'
+    base.mkdir(exist_ok=True)
+    for x in items:
+        d = base / dream_slug(x['w'])
+        d.mkdir(exist_ok=True)
+        (d / 'index.html').write_text(dream_page_html(x, items), 'utf-8')
+    (base / 'index.html').write_text(dream_index_html(items), 'utf-8')
+    (base / 'list.json').write_text(json.dumps([{'w': x['w']} for x in items], ensure_ascii=False), 'utf-8')
+
+
+def safe_dreams():
+    try:
+        items = fetch_dreams()
+        if items:
+            write_dreams(items)
+            write_sitemap()
+    except Exception as e:  # ห้ามทำให้งานหลักล้ม
+        print('ทำหน้าทำนายฝันไม่สำเร็จรอบนี้: %r' % e)
 
 
 def safe_backfill():
@@ -442,6 +546,7 @@ def main():
             write_archive(d)
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
         write_pwa(render=False)
+        safe_dreams()
         safe_backfill()
         return
 
@@ -474,6 +579,7 @@ def main():
             p.unlink()
     write_archive(d)
     write_pwa(render=True)
+    safe_dreams()
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
     safe_backfill()
 
