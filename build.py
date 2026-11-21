@@ -159,6 +159,41 @@ if('serviceWorker' in navigator){{window.addEventListener('load',function(){{nav
                          dg=digits, f3=e(f3), l3=e(l3), l2=e(d['last2']))
 
 
+FULL_KEYS = ('near1', 'second', 'third', 'fourth', 'fifth')
+
+
+def checker_js(d):
+    """ตรวจสลากในหน้าเว็บเลย ไม่ต้องเรียก Apps Script (วันหวยออกคนเยอะก็ไม่ล่ม)"""
+    data = {'first': [d['first']], 'last2': d['last2'], 'front3': d.get('front3') or [], 'last3': d.get('last3') or []}
+    for k in FULL_KEYS:
+        data[k] = d.get(k) or []
+    return ('var SLK=' + json.dumps(data, ensure_ascii=False).replace('</', '<\\/') + ';'
+            "var SLK_P=[['first','รางวัลที่ 1',6000000],['near1','ข้างเคียงรางวัลที่ 1',100000],['second','รางวัลที่ 2',200000],"
+            "['third','รางวัลที่ 3',80000],['fourth','รางวัลที่ 4',40000],['fifth','รางวัลที่ 5',20000]];"
+            "function slkCheck(n){var w=[];SLK_P.forEach(function(p){if(SLK[p[0]].indexOf(n)>=0)w.push([p[1],p[2]]);});"
+            "if(SLK.front3.indexOf(n.slice(0,3))>=0)w.push(['เลขหน้า 3 ตัว',4000]);"
+            "if(SLK.last3.indexOf(n.slice(3))>=0)w.push(['เลขท้าย 3 ตัว',4000]);"
+            "if(SLK.last2===n.slice(4))w.push(['เลขท้าย 2 ตัว',2000]);return w;}")
+
+
+def checker_html(d):
+    full = all(d.get(k) for k in FULL_KEYS)
+    note = '' if full else '<p class="warn">รางวัลที่ 2–5 และรางวัลข้างเคียงของงวดนี้ยังประกาศไม่ครบในระบบ ตอนนี้ตรวจได้เฉพาะรางวัลที่ 1, เลขหน้า 3 ตัว, เลขท้าย 3 ตัว และเลขท้าย 2 ตัว</p>'
+    return ('<section class="chk"><h2>ตรวจสลากของคุณ งวดนี้</h2>'
+            '<p class="muted">พิมพ์เลข 6 หลัก ใส่ได้หลายใบ คั่นด้วยเว้นวรรค</p>' + note +
+            '<textarea id="q" inputmode="numeric" rows="2" placeholder="เช่น 123456 654321"></textarea>'
+            '<button id="go" type="button">ตรวจเลย</button><div id="out" aria-live="polite"></div></section>'
+            '<script>' + checker_js(d) +
+            "(function(){var q=document.getElementById('q'),o=document.getElementById('out');"
+            "function fmt(x){return x.toLocaleString('th-TH');}"
+            "function run(){var ns=(q.value.match(/\\d{6}/g)||[]).slice(0,20);"
+            "if(!ns.length){o.innerHTML='<p class=\"muted\">ใส่เลข 6 หลักก่อนนะ</p>';return;}"
+            "o.innerHTML=ns.map(function(n){var w=slkCheck(n),t=w.reduce(function(a,x){return a+x[1];},0);"
+            "return '<div class=\"res '+(w.length?'win':'')+'\"><b>'+n+'</b> '+(w.length?w.map(function(x){return x[0]+' ('+fmt(x[1])+' บาท)';}).join(', ')+(w.length>1?' รวม '+fmt(t)+' บาท':''):'ไม่ถูกรางวัล')+'</div>';}).join('');}"
+            "document.getElementById('go').onclick=run;q.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();run();}});})();"
+            '</script>')
+
+
 def archive_html(d, older):
     """หน้าผลรายงวดแบบข้อความล้วน ให้ Google เก็บได้ (หน้าแรกเป็น iframe ซึ่ง Google อ่านเนื้อหาไม่ได้)"""
     e = html.escape
@@ -183,21 +218,23 @@ def archive_html(d, older):
 h1{{font-size:24px;line-height:1.3;margin:8px 0 16px}}.p1{{font:800 44px/1.1 system-ui,sans-serif;letter-spacing:6px;background:#0B3B33;color:#fff;border-radius:18px;padding:18px;text-align:center}}
 table{{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}}td,th{{padding:12px;border-bottom:1px solid #d6e2db;text-align:left}}td b{{font-size:20px;letter-spacing:1px}}
 .cta{{display:block;text-align:center;background:#FFC233;color:#1f1600;font-weight:800;font-size:18px;padding:14px;border-radius:40px;text-decoration:none;margin:20px 0}}
-.muted{{color:#4d6a62;font-size:14px}}a{{color:#0b3b33}}</style>
+.muted{{color:#4d6a62;font-size:14px}}a{{color:#0b3b33}}
+.chk{{background:#fff;border-radius:18px;padding:16px;margin:16px 0}}.chk h2{{font-size:19px;margin:0 0 4px}}.chk textarea{{width:100%;box-sizing:border-box;font:700 22px/1.4 system-ui,sans-serif;letter-spacing:2px;padding:10px;border:2px solid #b9cfc4;border-radius:12px}}.chk button{{width:100%;margin-top:10px;background:#0B3B33;color:#fff;border:0;border-radius:40px;padding:13px;font:800 18px system-ui,sans-serif}}.res{{padding:10px 12px;border-radius:12px;background:#eef3ef;margin-top:8px}}.res.win{{background:#FFE9A8}}.warn{{background:#fff4d6;border-radius:10px;padding:8px 10px;font-size:14px}}</style>
 </head><body><main>
 <p class="muted"><a href="../../">สลากแล็บ</a> › ผลหวยย้อนหลัง</p>
 <h1>ผลสลากกินแบ่งรัฐบาล งวด {dt}</h1>
 <p class="muted">รางวัลที่ 1</p>
 <div class="p1">{f}</div>
+{chk}
 <table>
 <tr><th>เลขหน้า 3 ตัว</th><td><b>{f3}</b></td></tr>
 <tr><th>เลขท้าย 3 ตัว</th><td><b>{l3}</b></td></tr>
 <tr><th>เลขท้าย 2 ตัว</th><td><b>{l2}</b></td></tr>
 </table>
-<a class="cta" href="../../">ตรวจสลากของคุณ ครบทุกรางวัล ฟรี</a>
+<a class="cta" href="../../">เก็บสลากไว้ใน "สลากของฉัน" ให้ตรวจอัตโนมัติทุกงวด</a>
 <p class="muted">ตรวจผลจริงกับใบตรวจของสำนักงานสลากกินแบ่งรัฐบาล (glo.or.th) อีกครั้งก่อนขึ้นเงิน ข้อมูลเพื่อความสะดวกเท่านั้น</p>
 {more}
-</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url + 'r/' + key + '/'), dt=e(dt), f=e(d['first']), f3=e(f3), l3=e(l3), l2=e(d['last2']), more=more)
+</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url + 'r/' + key + '/'), dt=e(dt), f=e(d['first']), f3=e(f3), l3=e(l3), l2=e(d['last2']), more=more, chk=checker_html(d))
 
 
 def write_archive(d):
@@ -262,7 +299,7 @@ def backfill(max_new=24, max_calls=60):
         if r.get('first') and len(r['first']) == 6:
             page = base / key / 'index.html'
             page.parent.mkdir(parents=True, exist_ok=True)
-            page.write_text(archive_html({'date': d, 'first': r['first'], 'last2': r['last2'], 'front3': r.get('front3') or [], 'last3': r.get('last3') or []},
+            page.write_text(archive_html(dict({'date': d, 'first': r['first'], 'last2': r['last2'], 'front3': r.get('front3') or [], 'last3': r.get('last3') or []}, **{k: r.get(k) or [] for k in FULL_KEYS}),
                                          sorted(have, reverse=True)), 'utf-8')
             have.add(key)
             added += 1
@@ -542,7 +579,10 @@ def main():
     result_keys = ('date', 'first', 'last2', 'front3', 'last3')
     unchanged = all(old.get(key) == d.get(key) for key in result_keys)
     if not force and unchanged and (ROOT / 'index.html').is_file() and image_file.is_file() and image_file.stat().st_size > 0:
-        if not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
+        if any(old.get(k) != d.get(k) for k in FULL_KEYS):  # รางวัลที่ 2–5 ประกาศตามมาทีหลัง: อัปเดตหน้าตรวจ ไม่ต้องทำรูปใหม่
+            data_file.write_text(json.dumps(d, ensure_ascii=False, indent=1), 'utf-8')
+            write_archive(d)
+        elif not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
             write_archive(d)
         print('ไม่มีงวดใหม่ (%s) ไม่ต้องสร้างใหม่' % d['date'])
         write_pwa(render=False)
