@@ -237,5 +237,13 @@ class BuildTests(unittest.TestCase):
         self.assertTrue((self.root / 'icon-192.png').is_file())
 
 
+    def test_index_shows_result_before_app_loads(self):
+        page = build.index_html(self.data, self.image_name)
+        self.assertIn('<b>4</b><b>2</b><b>3</b><b>2</b><b>2</b><b>4</b>', page)
+        self.assertIn('<strong>85</strong>', page)
+        self.assertIn('300 950', page)
+        self.assertIn("f.className='ready'", page)
+        self.assertNotIn('เลขเด็ด', page)
+
 if __name__ == '__main__':
     unittest.main()
