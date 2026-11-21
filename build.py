@@ -70,7 +70,10 @@ def index_html(d, img_name):
     e = html.escape
     url = site_url()
     title = 'ผลหวย งวด %s รางวัลที่ 1: %s ท้าย 2 ตัว: %s | สลากแล็บ' % (th_date(d['date']), d['first'], d['last2'])
-    desc = 'ตรวจหวยรัฐบาลครบทุกรางวัล ฟรี! กดเลย ใส่เลขสลากแล้วรู้ผลทันที พร้อมเลขเด็ดจากหลายสำนักและสถิติความแม่น'
+    desc = 'ตรวจหวยรัฐบาลครบทุกรางวัล ฟรี! ใส่เลขหรือถ่ายรูปสลากแล้วรู้ผลทันที พร้อมทำนายฝัน และสถิติเลขสำนักว่าแม่นจริงหรือแค่ดวง'
+    f3 = ' '.join(d.get('front3') or []) or '-'
+    l3 = ' '.join(d.get('last3') or []) or '-'
+    digits = ''.join('<b>%s</b>' % e(c) for c in d['first'])
     img = url + img_name
     return '''<!doctype html><html lang="th"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -102,17 +105,39 @@ def index_html(d, img_name):
 <style>html,body{{margin:0;height:100%;background:#0B3B33}}
 #inst{{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:9;display:none;align-items:center;gap:8px;width:max-content;max-width:min(440px,calc(100% - 32px));box-sizing:border-box;background:#FFC233;color:#1f1600;font:700 14px/1.35 system-ui,sans-serif;padding:8px 8px 8px 14px;border-radius:24px;box-shadow:0 6px 20px rgba(0,0,0,.3)}}
 #inst button{{font:inherit;border:0;border-radius:18px;cursor:pointer;white-space:nowrap;flex:none}}#inst .go{{background:#0B3B33;color:#fff;padding:7px 14px}}#inst .x{{background:transparent;color:#1f1600;padding:4px 8px;font-size:18px;line-height:1}}
-#app{{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0B3B33}}
-#fb{{position:fixed;inset:0;display:grid;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box}}
-#fb a{{display:inline-block;margin-top:14px;background:#FFC233;color:#1f1600;font-weight:800;padding:12px 24px;border-radius:40px;text-decoration:none}}</style>
+#app{{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#0B3B33;opacity:0;transition:opacity .35s}}
+#app.ready{{opacity:1}}
+#fb{{position:fixed;inset:0;display:grid;place-items:center;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:16px;box-sizing:border-box;overflow:auto}}
+#fb .c{{width:100%;max-width:420px}}
+#fb .k{{color:#b9d6cb;font-size:14px;margin:0 0 6px}}
+#fb .d{{display:flex;gap:6px;justify-content:center;margin:6px 0 12px}}
+#fb .d b{{flex:1;max-width:56px;background:#fff;color:#0B3B33;border-radius:12px;font:800 34px/1 system-ui,sans-serif;padding:12px 0}}
+#fb .s{{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:13px;color:#b9d6cb}}
+#fb .s div{{background:rgba(255,255,255,.08);border-radius:12px;padding:8px 4px}}#fb .s strong{{display:block;color:#fff;font-size:18px}}
+#fb .s .two{{background:#FFC233;color:#3d2f00}}#fb .s .two strong{{color:#1f1600;font-size:24px}}
+#fb .w{{margin-top:16px;font-size:14px;color:#b9d6cb}}
+#fb .sp{{display:inline-block;width:14px;height:14px;border:2px solid #b9d6cb;border-top-color:transparent;border-radius:50%;animation:r 1s linear infinite;vertical-align:-2px;margin-right:6px}}
+@keyframes r{{to{{transform:rotate(360deg)}}}}
+@media (prefers-reduced-motion:reduce){{#fb .sp{{animation:none}}#app{{transition:none}}}}
+#fb a{{display:inline-block;margin-top:10px;color:#FFC233;font-weight:700;font-size:14px}}</style>
 </head><body>
-<div id="fb"><div>กำลังเปิดสลากแล็บ…<br><a href="{a}">ถ้าไม่ขึ้น กดที่นี่</a></div></div>
+<div id="fb"><div class="c">
+<p class="k">ผลสลากกินแบ่งรัฐบาล งวด {dt} · รางวัลที่ 1</p>
+<div class="d" aria-label="รางวัลที่ 1 {f}">{dg}</div>
+<div class="s"><div>เลขหน้า 3 ตัว<strong>{f3}</strong></div><div>เลขท้าย 3 ตัว<strong>{l3}</strong></div><div class="two">ท้าย 2 ตัว<strong>{l2}</strong></div></div>
+<p class="w"><span class="sp" aria-hidden="true"></span>กำลังเปิดหน้าตรวจสลากของคุณ…</p>
+<a href="{a}">ถ้าไม่ขึ้น กดที่นี่</a>
+</div></div>
 <iframe id="app" title="สลากแล็บ" allow="clipboard-write; web-share; camera" referrerpolicy="no-referrer-when-downgrade"></iframe>
 <div id="inst" role="dialog" aria-label="ติดตั้งแอป"><span id="instTxt"></span><button class="go" id="instGo" type="button">ติดตั้ง</button><button class="x" id="instX" type="button" aria-label="ปิด">×</button></div>
 <script>
 (function(){{
   var app={aj}, q=location.search.replace(/^\\?/,'').split('&').filter(function(p){{return p&&p.indexOf('d=')!==0;}}).join('&');
-  document.getElementById('app').src=app+(q?'?'+q:'')+location.hash;
+  var f=document.getElementById('app'), done=false;
+  function show(){{if(done)return;done=true;f.className='ready';}}
+  f.addEventListener('load',function(){{setTimeout(show,1500);}});
+  setTimeout(show,9000);
+  f.src=app+(q?'?'+q:'')+location.hash;
 }})();
 if('serviceWorker' in navigator){{window.addEventListener('load',function(){{navigator.serviceWorker.register('sw.js').catch(function(){{}});}});}}
 (function(){{
@@ -130,7 +155,8 @@ if('serviceWorker' in navigator){{window.addEventListener('load',function(){{nav
 }})();
 </script>
 </body></html>'''.format(t=e(title), d=e(desc), u=e(url + '?d=' + d['date'].replace('-', '')), i=e(img), dt=e(th_date(d['date'])), f=e(d['first']),
-                         n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL))
+                         n=e(img_name), a=e(APP_URL), aj=json.dumps(APP_URL),
+                         dg=digits, f3=e(f3), l3=e(l3), l2=e(d['last2']))
 
 
 def archive_html(d, older):
