@@ -186,8 +186,11 @@ def checker_html(d):
             '<script>' + checker_js(d) +
             "(function(){var q=document.getElementById('q'),o=document.getElementById('out');"
             "function fmt(x){return x.toLocaleString('th-TH');}"
-            "function run(){var ns=(q.value.match(/\\d{6}/g)||[]).slice(0,20);"
-            "if(!ns.length){o.innerHTML='<p class=\"muted\">ใส่เลข 6 หลักก่อนนะ</p>';return;}"
+            "function run(){var input=q.value.trim().replace(/[๐-๙]/g,function(c){return String(c.charCodeAt(0)-3664);});"
+            "if(!input){o.innerHTML='<p class=\"muted\">ใส่เลข 6 หลักก่อนนะ</p>';return;}"
+            "var ns=input.split(/\\s+/);"
+            "if(ns.length>20){o.innerHTML='<p class=\"warn\">ตรวจได้ครั้งละไม่เกิน 20 ใบ</p>';return;}"
+            "if(ns.some(function(n){return !/^[0-9]{6}$/.test(n);})){o.innerHTML='<p class=\"warn\">เลขสลากต้องมี 6 หลักต่อใบ คั่นแต่ละใบด้วยเว้นวรรคหรือขึ้นบรรทัดใหม่</p>';return;}"
             "o.innerHTML=ns.map(function(n){var w=slkCheck(n),t=w.reduce(function(a,x){return a+x[1];},0);"
             "return '<div class=\"res '+(w.length?'win':'')+'\"><b>'+n+'</b> '+(w.length?w.map(function(x){return x[0]+' ('+fmt(x[1])+' บาท)';}).join(', ')+(w.length>1?' รวม '+fmt(t)+' บาท':''):'ไม่ถูกรางวัล')+'</div>';}).join('');}"
             "document.getElementById('go').onclick=run;q.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();run();}});})();"
