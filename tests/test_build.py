@@ -31,9 +31,10 @@ class BuildTests(unittest.TestCase):
             (self.root / name).write_bytes(b'icon')
         self.history = {}
         self.dreams = []
+        self.l6 = {}
         for target, value in [('ROOT', self.root), ('fetch_latest', lambda: self.data), ('find_chrome', lambda: 'chromium'),
                               ('fetch_result', lambda date: self.history.get(date, {'date': date, 'none': True})),
-                              ('fetch_dreams', lambda: self.dreams)]:
+                              ('fetch_dreams', lambda: self.dreams), ('fetch_l6', lambda date: self.l6.get(date))]:
             p = patch.object(build, target, value)
             p.start()
             self.addCleanup(p.stop)
@@ -285,6 +286,63 @@ class BuildTests(unittest.TestCase):
 console.log([t('423224'),t('423225'),t('111111'),t('300999'),t('000393'),t('000085'),t('999999')].join('|'));"""
         out = sp.run([node, '-e', code], capture_output=True, text=True, check=True).stdout.strip()
         self.assertEqual(out, '["รางวัลที่ 1"]|["ข้างเคียงรางวัลที่ 1"]|["รางวัลที่ 2"]|["เลขหน้า 3 ตัว"]|["เลขท้าย 3 ตัว"]|["เลขท้าย 2 ตัว"]|[]')
+
+    @staticmethod
+    def l6_row(first, f3, l3, l2):
+        n = [first] + f3 + l3 + [l2, '%06d' % (int(first) - 1), '%06d' % (int(first) + 1)]
+        n += ['%06d' % (100000 + i) for i in range(5 + 10 + 50 + 100)]
+        return {'n': n, 'url': 'https://api.glo.or.th/utility/file/download/abc'}
+
+    def test_parse_l6_maps_all_prizes(self):
+        r = build.parse_l6('2026-11-01', self.l6_row('423224', ['300', '950'], ['393', '804'], '85'))
+        self.assertEqual(r['first'], '423224'); self.assertEqual(r['front3'], ['300', '950']); self.assertEqual(r['last3'], ['393', '804'])
+        self.assertEqual(r['last2'], '85'); self.assertEqual(r['near1'], ['423223', '423225'])
+        self.assertEqual([len(r[k]) for k in ('second', 'third', 'fourth', 'fifth')], [5, 10, 50, 100])
+        self.assertEqual(r['glo_url'], 'https://api.glo.or.th/utility/file/download/abc')
+        self.assertIsNone(build.parse_l6('2026-11-01', {'n': ['1'] * 10}))
+        bad = build.parse_l6('2026-11-01', dict(self.l6_row('423224', ['300', '950'], ['393', '804'], '85'), url='https://evil.example/x'))
+        self.assertNotIn('glo_url', bad)
+
+    def test_latest_enriched_from_codex_when_numbers_match(self):
+        self.l6['2026-11-16'] = self.l6_row('423224', ['300', '950'], ['393', '804'], '85')
+        self.build_new()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertNotIn('ยังประกาศไม่ครบ', page.split('<script>')[0])
+        self.assertIn('api.glo.or.th/utility/file/download/abc', page)
+        self.assertEqual(len(json.loads((self.root / 'data.json').read_text())['fifth']), 100)
+
+    def test_codex_mismatch_is_ignored(self):
+        self.l6['2026-11-16'] = self.l6_row('999999', ['300', '950'], ['393', '804'], '85')
+        self.build_new()
+        page = (self.root / 'r' / '20261116' / 'index.html').read_text()
+        self.assertIn('ยังประกาศไม่ครบ', page)
+        self.assertNotIn('fifth', json.loads((self.root / 'data.json').read_text()))
+
+    def test_codex_down_never_breaks_build(self):
+        def boom(date):
+            raise OSError('down')
+        with patch.object(build, 'fetch_l6', boom):
+            self.build_new()
+        self.assertTrue((self.root / 'r' / '20261116' / 'index.html').is_file())
+
+    def test_old_archive_pages_upgraded_to_full_checker(self):
+        old = self.root / 'r' / '20261016' / 'index.html'
+        old.parent.mkdir(parents=True)
+        old.write_text('<html>old page without checker 011781</html>')
+        self.l6['2026-10-16'] = self.l6_row('011781', ['392', '402'], ['171', '255'], '48')
+        n = build.upgrade_archive(max_pages=5)
+        self.assertEqual(n, 1)
+        page = old.read_text()
+        self.assertIn('id="q"', page); self.assertIn('011781', page); self.assertNotIn('ยังประกาศไม่ครบ', page.split('<script>')[0])
+        self.assertEqual(build.upgrade_archive(max_pages=5), 0)
+
+    def test_upgrade_skips_when_first_prize_differs(self):
+        old = self.root / 'r' / '20261016' / 'index.html'
+        old.parent.mkdir(parents=True)
+        old.write_text('<html>old 011781</html>')
+        self.l6['2026-10-16'] = self.l6_row('222222', ['392', '402'], ['171', '255'], '48')
+        self.assertEqual(build.upgrade_archive(max_pages=5), 0)
+        self.assertNotIn('id="q"', old.read_text())
 
     def test_dream_pages_and_sitemap(self):
         self.dreams = [{'w': 'งู', 'a': 'งูเห่า', 'two': ['56', '66'], 'three': [], 'd': ['5', '6']},
