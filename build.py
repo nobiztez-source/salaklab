@@ -4,7 +4,7 @@
   python3 build.py            # สร้างเมื่อมีงวดใหม่
   python3 build.py --force    # สร้างใหม่ทุกครั้ง
 """
-import datetime, html, json, os, pathlib, subprocess, sys, tempfile, urllib.parse, urllib.request
+import datetime, html, json, os, pathlib, subprocess, sys, tempfile, urllib.error, urllib.parse, urllib.request
 
 APP_URL = 'https://script.google.com/macros/s/AKfycbxhIOh8KTaJEmsvedhI3ISnYBu2-YHDENgIs1xWBuEovL18AyrmJyP5eKSXrr25XMAyQw/exec'
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -162,6 +162,88 @@ if('serviceWorker' in navigator){{window.addEventListener('load',function(){{nav
 FULL_KEYS = ('near1', 'second', 'third', 'fourth', 'fifth')
 
 
+CODEX_URL = 'https://salaklab.ealaearendel.chatgpt.site'  # เว็บเวอร์ชัน Codex: ดึงผลจริงจากกองสลากครบทุกรางวัล
+
+
+def fetch_l6(date):
+    """ผลครบทุกรางวัลจากเว็บ Codex (ดึงจากประกาศกองสลาก) หรือ None"""
+    req = urllib.request.Request(CODEX_URL + '/api/l6?date=' + date, headers={'User-Agent': 'salaklab-pages-builder'})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode('utf-8'))
+    except urllib.error.HTTPError:
+        return None
+
+
+def parse_l6(date, row):
+    """แปลงรูปแบบ n[173] ของ Codex: ที่1, หน้า3 x2, ท้าย3 x2, ท้าย2, ข้างเคียง x2, ที่2 x5, ที่3 x10, ที่4 x50, ที่5 x100"""
+    n = (row or {}).get('n') or []
+    if len(n) != 173:
+        return None
+    widths = [6, 3, 3, 3, 3, 2] + [6] * 167
+    if any(not (isinstance(x, str) and x.isdigit() and len(x) == w) for x, w in zip(n, widths)):
+        return None
+    out = {'date': date, 'first': n[0], 'front3': n[1:3], 'last3': n[3:5], 'last2': n[5], 'near1': n[6:8],
+           'second': n[8:13], 'third': n[13:23], 'fourth': n[23:73], 'fifth': n[73:173]}
+    url = str(row.get('url') or '')
+    if url.startswith('https://api.glo.or.th/') or url.startswith('https://www.glo.or.th/'):
+        out['glo_url'] = url
+    return out
+
+
+def enrich(d):
+    """เติมรางวัลที่ 2–5 + ลิงก์ประกาศกองสลากจากเว็บ Codex เฉพาะเมื่อเลขหลักตรงกับระบบเรา (ตรวจไขว้สองแหล่ง)"""
+    if all(d.get(k) for k in FULL_KEYS) and d.get('glo_url'):
+        return d
+    try:
+        r = parse_l6(d['date'], fetch_l6(d['date']))
+    except Exception as e:  # ห้ามทำให้งานหลักล้ม
+        print('ดึงผลจากเว็บ Codex ไม่สำเร็จ: %r' % e)
+        return d
+    if not r:
+        return d
+    if (r['first'], r['last2'], sorted(r['front3']), sorted(r['last3'])) != (d['first'], d['last2'], sorted(d.get('front3') or []), sorted(d.get('last3') or [])):
+        print('ผลจากเว็บ Codex ไม่ตรงกับระบบเรา งวด %s: ไม่ใช้' % d['date'])
+        return d
+    out = dict(d)
+    for k in FULL_KEYS + ('glo_url',):
+        if r.get(k) and not out.get(k):
+            out[k] = r[k]
+    return out
+
+
+def upgrade_archive(max_pages=25):
+    """หน้าผลงวดเก่าที่ยังไม่มีช่องตรวจ: ดึงผลครบจากเว็บ Codex แล้วสร้างใหม่ทีละน้อย"""
+    base = ROOT / 'r'
+    if not base.is_dir():
+        return 0
+    keys = sorted([p.name for p in base.iterdir() if p.is_dir() and p.name.isdigit()], reverse=True)
+    done = tries = 0
+    for i, key in enumerate(keys):
+        if done >= max_pages or tries >= max_pages * 2:
+            break
+        page = base / key / 'index.html'
+        text = page.read_text('utf-8') if page.is_file() else 'id="q"'
+        if 'id="q"' in text:
+            continue
+        date = '%s-%s-%s' % (key[:4], key[4:6], key[6:])
+        tries += 1
+        r = parse_l6(date, fetch_l6(date))
+        if not r or r['first'] not in text:  # ตรวจไขว้: รางวัลที่ 1 ต้องตรงกับหน้าเดิม
+            continue
+        page.write_text(archive_html(r, keys[i + 1:]), 'utf-8')
+        done += 1
+    print('อัปเกรดหน้าผลเก่าให้ตรวจได้ครบ %d หน้า' % done)
+    return done
+
+
+def safe_upgrade():
+    try:
+        upgrade_archive(int(os.environ.get('UPGRADE_MAX', '25')))
+    except Exception as e:  # ห้ามทำให้งานหลักล้ม
+        print('อัปเกรดหน้าผลเก่าไม่สำเร็จรอบนี้: %r' % e)
+
+
 def checker_js(d):
     """ตรวจสลากในหน้าเว็บเลย ไม่ต้องเรียก Apps Script (วันหวยออกคนเยอะก็ไม่ล่ม)"""
     data = {'first': [d['first']], 'last2': d['last2'], 'front3': d.get('front3') or [], 'last3': d.get('last3') or []}
@@ -234,10 +316,10 @@ table{{width:100%;border-collapse:collapse;margin:16px 0;background:#fff}}td,th{
 <tr><th>เลขท้าย 3 ตัว</th><td><b>{l3}</b></td></tr>
 <tr><th>เลขท้าย 2 ตัว</th><td><b>{l2}</b></td></tr>
 </table>
-<a class="cta" href="../../">เก็บสลากไว้ใน "สลากของฉัน" ให้ตรวจอัตโนมัติทุกงวด</a>
+{glo}<a class="cta" href="../../">เก็บสลากไว้ใน "สลากของฉัน" ให้ตรวจอัตโนมัติทุกงวด</a>
 <p class="muted">ตรวจผลจริงกับใบตรวจของสำนักงานสลากกินแบ่งรัฐบาล (glo.or.th) อีกครั้งก่อนขึ้นเงิน ข้อมูลเพื่อความสะดวกเท่านั้น</p>
 {more}
-</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url + 'r/' + key + '/'), dt=e(dt), f=e(d['first']), f3=e(f3), l3=e(l3), l2=e(d['last2']), more=more, chk=checker_html(d))
+</main></body></html>'''.format(t=e(title), ds=e(desc), u=e(url + 'r/' + key + '/'), dt=e(dt), f=e(d['first']), f3=e(f3), l3=e(l3), l2=e(d['last2']), more=more, chk=checker_html(d), glo=('<p class="muted"><a href="%s" rel="noopener">เปิดใบประกาศผลของกองสลาก (PDF) ↗</a></p>' % e(d['glo_url'])) if d.get('glo_url') else '')
 
 
 def write_archive(d):
@@ -575,6 +657,7 @@ def main():
     d = fetch_latest()
     if not (d.get('date') and len(d.get('first', '')) == 6):
         raise SystemExit('ยังไม่มีผลล่าสุดจากระบบ: %r' % d)
+    d = enrich(d)
     data_file = ROOT / 'data.json'
     old = json.loads(data_file.read_text('utf-8')) if data_file.exists() else {}
     img_name = 'og-%s.png' % d['date'].replace('-', '')
@@ -582,7 +665,7 @@ def main():
     result_keys = ('date', 'first', 'last2', 'front3', 'last3')
     unchanged = all(old.get(key) == d.get(key) for key in result_keys)
     if not force and unchanged and (ROOT / 'index.html').is_file() and image_file.is_file() and image_file.stat().st_size > 0:
-        if any(old.get(k) != d.get(k) for k in FULL_KEYS):  # รางวัลที่ 2–5 ประกาศตามมาทีหลัง: อัปเดตหน้าตรวจ ไม่ต้องทำรูปใหม่
+        if any(old.get(k) != d.get(k) for k in FULL_KEYS + ('glo_url',)):  # รางวัลที่ 2–5 ประกาศตามมาทีหลัง: อัปเดตหน้าตรวจ ไม่ต้องทำรูปใหม่
             data_file.write_text(json.dumps(d, ensure_ascii=False, indent=1), 'utf-8')
             write_archive(d)
         elif not (ROOT / 'r' / d['date'].replace('-', '') / 'index.html').is_file() or not (ROOT / 'sitemap.xml').is_file():
@@ -591,6 +674,7 @@ def main():
         write_pwa(render=False)
         safe_dreams()
         safe_backfill()
+        safe_upgrade()
         return
 
     # Render and stage every output before replacing the last working page.
@@ -625,6 +709,7 @@ def main():
     safe_dreams()
     print('สร้างหน้าแชร์งวด %s แล้ว: %s' % (d['date'], img_name))
     safe_backfill()
+    safe_upgrade()
 
 
 if __name__ == '__main__':
